@@ -1,0 +1,113 @@
+diff --git a/src/Hooks/IconView.xm b/src/Hooks/IconView.xm
+index 9af5bd0..261c985 100644
+--- a/src/Hooks/IconView.xm
++++ b/src/Hooks/IconView.xm
+@@ -55,6 +55,22 @@
+ @property (nonatomic, assign) CGFloat _atriaShadowScale;
+ @end
+ 
++// iOS 17 source patch: qwelllAtriaReturnScaleFix.
++// Keep page identity only while the original list still owns this exact icon.
++static BOOL qwelllAtriaReturnScaleFixEnabled(void) {
++    NSOperatingSystemVersion v = [NSProcessInfo processInfo].operatingSystemVersion;
++    return v.majorVersion == 17;
++}
++
++static BOOL qwelllAtriaReturnScaleFixIsRoot(SBIconView *view) {
++    if(IconIsInRoot(view)) return YES;
++    // Do not reinterpret explicit Dock, folder, library or other locations.
++    if(view.location.length || !view.icon) return NO;
++    SBIconListView *list = view._atriaLastIconListView;
++    if(!list || !IconListIsRoot(list)) return NO;
++    return [[list icons] indexOfObjectIdenticalTo:view.icon] != NSNotFound;
++}
++
+ static __weak SBIconView *libraryPodIconView;
+ 
+ static void ARIReapplyOffsets(UIView *view, NSInteger depth) {
+@@ -153,13 +169,44 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ }
+ 
+ - (void)_updateIconImageViewAnimated:(BOOL)arg1 {
+-	%orig(arg1);
+-	[self _atriaUpdateIconContentScale];
++    if(qwelllAtriaReturnScaleFixEnabled() && qwelllAtriaReturnScaleFixIsRoot(self)
++       && ![ARIEditManager sharedInstance].isEditing) {
++        [CATransaction begin];
++        [CATransaction setDisableActions:YES];
++        %orig(arg1);
++        [self _atriaUpdateIconContentScale];
++        [CATransaction commit];
++        return;
++    }
++    %orig(arg1);
++    [self _atriaUpdateIconContentScale];
+ }
+ 
+ - (void)setIconContentScale:(CGFloat)scale {
+-	%orig(scale);
+-	[self _atriaUpdateIconContentScale];
++    if(qwelllAtriaReturnScaleFixEnabled() && qwelllAtriaReturnScaleFixIsRoot(self)
++       && ![ARIEditManager sharedInstance].isEditing) {
++        [CATransaction begin];
++        [CATransaction setDisableActions:YES];
++        %orig(scale);
++        [self _atriaUpdateIconContentScale];
++        [CATransaction commit];
++        return;
++    }
++    %orig(scale);
++    [self _atriaUpdateIconContentScale];
++}
++
++// A layout pass may rewrite layer state without invoking either setter above.
++// Reapply in the same synchronous pass, never on a timer or the next frame.
++- (void)layoutSubviews {
++    %orig;
++    if(qwelllAtriaReturnScaleFixEnabled() && qwelllAtriaReturnScaleFixIsRoot(self)
++       && ![ARIEditManager sharedInstance].isEditing) {
++        [CATransaction begin];
++        [CATransaction setDisableActions:YES];
++        [self _atriaUpdateIconContentScale];
++        [CATransaction commit];
++    }
+ }
+ 
+ %new
+@@ -169,7 +216,9 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ 	CATransform3D old = self.layer.sublayerTransform;
+ 
+ 	BOOL inDock = IconIsInAnyDock(self);
+-	if(!(inDock || IconIsInRoot(self) || (IconIsInFolder(self) && [manager boolValueForKey:@"scaleInsideFolders"]))) {
++    BOOL inRoot = qwelllAtriaReturnScaleFixEnabled()
++        ? qwelllAtriaReturnScaleFixIsRoot(self) : IconIsInRoot(self);
++	if(!(inDock || inRoot || (IconIsInFolder(self) && [manager boolValueForKey:@"scaleInsideFolders"]))) {
+ 		if(old.m11 != 1 || old.m22 != 1) self.layer.sublayerTransform = CATransform3DMakeScale(1, 1, 1);
+ 		return;
+ 	}
+@@ -179,7 +228,7 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ 	if(isWidget) {
+ 		customScale = [manager scaleValueForKey:@"hs_widgetIconScale" forListView:self._atriaLastIconListView];
+ 	} else {
+-		if(IconIsInRoot(self) || (IconIsInFolder(self) && [manager boolValueForKey:@"scaleInsideFolders"])) {
++		if(inRoot || (IconIsInFolder(self) && [manager boolValueForKey:@"scaleInsideFolders"])) {
+ 			customScale = [manager scaleValueForKey:@"hs_iconScale" forListView:self._atriaLastIconListView];
+ 		} else if(inDock) {
+ 			customScale = [manager scaleValueForKey:@"dock_iconScale" forListView:self._atriaLastIconListView];
+@@ -217,8 +266,14 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ 		[CATransaction commit];
+ 	} else {
+ 		// Resize and update drop shadow immediately
+-		resize();
+-		[self _atriaGenerateDropShadow:self.bounds];
++        BOOL atomicRoot = qwelllAtriaReturnScaleFixEnabled() && inRoot;
++        if(atomicRoot) {
++            [CATransaction begin];
++            [CATransaction setDisableActions:YES];
++        }
++        resize();
++        [self _atriaGenerateDropShadow:self.bounds];
++        if(atomicRoot) [CATransaction commit];
+ 	}
+ }
+ 
