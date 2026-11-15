@@ -1,0 +1,9 @@
+Package: com.qwelll.atriascalenoanim
+Name: Atria Scale No Anim
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: 修复 Atria 在 iOS 17 上滑返回桌面时图标「恢复原大小再变小」的闪回（禁用 sublayerTransform 的隐式动画）
+Maintainer: qwelll
+Author: qwelll
+Section: Tweaks
+Depends: mobilesubstrate

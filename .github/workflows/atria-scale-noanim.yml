@@ -1,0 +1,58 @@
+name: AtriaScaleNoAnim RootHide
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  THEOS: ${{ github.workspace }}/theos-roothide
+  HOMEBREW_NO_AUTO_UPDATE: 1
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.4'
+      - uses: actions/checkout@v4
+        with:
+          repository: roothide/theos
+          path: theos-roothide
+          submodules: recursive
+      - name: Install dependencies and SDK 16.5
+        run: |
+          set -euo pipefail
+          brew install ldid dpkg xz
+          mkdir -p deliverables
+          stage="$(mktemp -d)"
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git "$stage/sdks"
+          git -C "$stage/sdks" sparse-checkout set iPhoneOS16.5.sdk
+          mkdir -p "$THEOS/sdks"
+          cp -R "$stage/sdks/iPhoneOS16.5.sdk" "$THEOS/sdks/"
+          git -C "$stage/sdks" rev-parse HEAD > deliverables/SDK-COMMIT.txt
+          git -C theos-roothide rev-parse HEAD > deliverables/THEOS-COMMIT.txt
+          git -C theos-roothide submodule status >> deliverables/THEOS-COMMIT.txt
+          xcodebuild -version
+          python3 - <<'PY'
+          import socket
+          for n in range(1,21):
+              h=f'productionresultssa{n}.blob.core.windows.net'
+              try: print(f'::notice::{h} {socket.gethostbyname(h)}')
+              except OSError: pass
+          PY
+      - name: Build AtriaScaleNoAnim RootHide dual arch
+        working-directory: projects/AtriaScaleNoAnim
+        run: |
+          set -euo pipefail
+          make package FINALPACKAGE=1 DEBUG=0 THEOS_PACKAGE_SCHEME=roothide ARCHS="arm64 arm64e" TARGET=iphone:clang:16.5:15.0 2>&1 | tee ../../deliverables/build.log
+          for deb in packages/*.deb; do
+            dpkg-deb -I "$deb"
+            dpkg-deb -c "$deb"
+            cp "$deb" ../../deliverables/
+          done
+          shasum -a 256 Tweak.x Makefile control AtriaScaleNoAnim.plist README.md > ../../deliverables/SOURCE-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AtriaScaleNoAnim-1.0.0-RootHide-${{ github.run_id }}
+          path: deliverables/*
+          if-no-files-found: error
