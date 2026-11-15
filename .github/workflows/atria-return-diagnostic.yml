@@ -32,6 +32,13 @@ jobs:
           cp patches/Atria-ReturnDiagnostic-qwellldiag1.patch deliverables/
           git -C atria-source diff --stat
           xcodebuild -version
+          python3 - <<'PY'
+          import socket
+          for n in range(1,21):
+              h=f'productionresultssa{n}.blob.core.windows.net'
+              try: print(f'::notice::{h} {socket.gethostbyname(h)}')
+              except OSError: pass
+          PY
           git -C theos-roothide rev-parse HEAD > deliverables/THEOS-COMMIT.txt
           git -C theos-roothide submodule status >> deliverables/THEOS-COMMIT.txt
           tar --exclude=.git -czf deliverables/Atria-1.9.3+qwellldiag1-GPL-source.tar.gz atria-source
