@@ -1,0 +1,341 @@
+diff --git a/DIAGNOSTIC-TESTING.txt b/DIAGNOSTIC-TESTING.txt
+new file mode 100644
+index 0000000..e1e62eb
+--- /dev/null
++++ b/DIAGNOSTIC-TESTING.txt
+@@ -0,0 +1,55 @@
++Atria 1.9.3+qwellldiag1 / RootHide diagnostic / GPL-3.0-or-later
++Base: CySxL/Atria 97487ef45c7bbd335f5f69d7a5568dbf44175ec7.
++This replaces com.cysxl.atria (same package identifier); never install as a second Atria.
++No qwelllfix1 scale behavior changes. GridLayout short casts are build compatibility only.
++Remove/disable AtriaZoomGuard and any older independent scaling patch before testing.
++The package conflicts with com.qwelll.atriazoomguard. Preserve existing Atria settings.
++Install the deb with the RootHide package manager, then respring using your normal tool.
++No device result or fix success is claimed. This is temporary diagnostics, not a fix.
++
++Test on iOS 17.2.1:
++1. Set a clearly non-default Home Screen icon scale; note the value externally.
++2. Wait 5 seconds after SpringBoard reload so startup logs have flushed.
++3. Open an app from the Home Screen, remain there 3 seconds, return Home normally.
++4. Repeat 2-3 times; avoid scrolling/wiggle/edit mode during each capture.
++5. Repeat with an app in Dock and non-default Dock scale as the control case.
++6. Wait at least 5 seconds after the last return; collect log and .1 if present.
++7. Optional iOS 15 control, same settings. Record OS, scale settings, test times,
++   gesture/button exit and observed flash externally, without identifying apps.
++8. Restore a regular Atria build after collecting logs to remove diagnostic overhead.
++
++Log priority: SpringBoard's own NSHomeDirectory()/Documents/AtriaReturnDiagnostic.log
++Typical non-container home: /var/mobile/Documents/AtriaReturnDiagnostic.log
++Fallback: /tmp/AtriaReturnDiagnostic.log (sometimes /private/var/tmp equivalent).
++RootHide virtual paths and SpringBoard home can differ. Check from the SpringBoard
++jailbreak environment, not merely the terminal app's own sandbox home.
++Use a privileged file manager to check these paths and their .1 rotated siblings.
++LOAD qwellldiag1 marker includes OS, method encodings and enabled/skipped hook checks.
++Absence of a file alone does NOT prove failure to load: check paths, write permissions,
++RootHide injection enablement, selected app/process and package version separately.
++Logs never include app names, bundle IDs, UI text, images or object addresses.
++viewID is an incrementing opaque view-object ID reset on SpringBoard restart;
++view reuse means it is NOT an app identifier. superclass is the superview class.
++t is seconds since 2001-01-01 UTC; uptime is monotonic seconds.
++Matrices are m11,m12,...,m44. Null presentation means no available presentation layer.
++seq preserves accepted observation order. before / afterOrig / afterAtria distinguish
++system method and the unchanged upstream Atria scaling operation.
++
++Only SBApplicationIcon in explicit Home/Dock enum locations is sampled.
++Skipped: folders/widgets/App Library and off-main-thread calls. No arbitrary subtree
++walks: only contentContainerView and existing _iconImageView object ivar are read.
++No global UIView/CALayer hooks, no scale/animation/layout/visibility setters added.
++_applyIconContentScale:, _updateIconContentScale verified against iOS17 header:
++MTACS/iOS-17-Runtime-Headers PrivateFrameworks/SpringBoardHome.framework/SBIconView.h
++blob 6f32dbd5ec067750c2bb79d5503d7fd0251c0d3f.
++All three optional hooks (including inherited setHidden:) require matching runtime
++return/argument encodings. Missing/mismatched methods are skipped, never invented.
++Effective/normal scale getters have a reentrancy guard; nested diagnostic reads skip.
++
++Performance limits: 480 records in the overwrite buffer, at most one 480-record
++in-flight batch (960 total queued observations). 2-second event-driven merge;
++no periodic sampling, no periodic scale refresh, JSON/file work on serial I/O queue.
++Slow I/O cannot enqueue unlimited batches. Overwrites emit ring_overwrite count.
++Log rotates at >2 MiB before append to one .1 backup (each can exceed by one batch).
++This bounds memory and disk, not zero timing impact: private getters and presentation
++reads can perturb timing. Reproduce without diagnostics as a control.
+diff --git a/layout/DEBIAN/control b/layout/DEBIAN/control
+index fbdf6fc..0897e6b 100644
+--- a/layout/DEBIAN/control
++++ b/layout/DEBIAN/control
+@@ -1,9 +1,9 @@
+ Package: com.cysxl.atria
+ Name: Atria
+-Version: 1.9.3
++Version: 1.9.3+qwellldiag1
+ Architecture: iphoneos-arm
+ Depends: firmware (>= 15.0), mobilesubstrate, preferenceloader
+-Conflicts: me.lau.atria, com.irepo.boxy4, me.kritanta.homepluspro
++Conflicts: com.qwelll.atriazoomguard, me.lau.atria, com.irepo.boxy4, me.kritanta.homepluspro
+ Replaces: me.lau.atria
+ Provides: me.lau.atria
+ Description: A fork of ren7995's Atria.
+diff --git a/src/Hooks/GridLayout.xm b/src/Hooks/GridLayout.xm
+index 84ba7e6..b725a80 100644
+--- a/src/Hooks/GridLayout.xm
++++ b/src/Hooks/GridLayout.xm
+@@ -51,9 +51,9 @@ static struct SBHIconGridSizeClassSizes generateGridSizeClassSizes(double cols,
+ 	} else {
+ 		// Usually 2x2, 4x2, 4x4, 4x6
+ 		sizes.small = (struct SBHIconGridSize) { .width = ROUND_SHORT(cols / 2), .height = ROUND_SHORT(rows / 3) };
+-		sizes.medium = (struct SBHIconGridSize) { .width = cols, .height = ROUND_SHORT(rows / 3) };
+-		sizes.large = (struct SBHIconGridSize) { .width = cols, .height = ROUND_SHORT(rows * 2 / 3) };
+-		sizes.extraLarge = (struct SBHIconGridSize) { .width = cols, .height = rows };
++		sizes.medium = (struct SBHIconGridSize) { .width = (short)cols, .height = ROUND_SHORT(rows / 3) };
++		sizes.large = (struct SBHIconGridSize) { .width = (short)cols, .height = ROUND_SHORT(rows * 2 / 3) };
++		sizes.extraLarge = (struct SBHIconGridSize) { .width = (short)cols, .height = (short)rows };
+ 	}
+ 	return sizes;
+ }
+@@ -91,8 +91,8 @@ static struct SBHIconGridSizeClassSizes generateGridSizeClassSizes(double cols,
+ 	NSUInteger rows = [manager gridValueForKey:@"hs_rows" forListView:[self _atriaListView]];
+ 
+ 	// Update grid size
+-	gridSize.height = rows;
+-	gridSize.width = cols;
++	gridSize.height = (short)rows;
++	gridSize.width = (short)cols;
+ 	// setGridSize method only exists on iOS 15+, but the ivar exists on 14 too
+ 	if(struct SBHIconGridSize *slot = ARIIvarPointer<struct SBHIconGridSize>(self, "_gridSize"))
+ 		*slot = gridSize;
+diff --git a/src/Hooks/IconView.xm b/src/Hooks/IconView.xm
+index 9af5bd0..482e525 100644
+--- a/src/Hooks/IconView.xm
++++ b/src/Hooks/IconView.xm
+@@ -8,6 +8,8 @@
+ #import "../Manager/ARIEditManager.h"
+ 
+ #include <objc/runtime.h>
++#import "qwelllAtriaReturnDiagnostic.h"
++#include <math.h>
+ 
+ @interface SBIconLegibilityLabelView : UIView
+ @property (nonatomic, assign) CGRect _atriaNaturalFrame;
+@@ -153,13 +155,19 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ }
+ 
+ - (void)_updateIconImageViewAnimated:(BOOL)arg1 {
++	qwelll_atriadiag_record(self, "imageUpdate.before", arg1);
+ 	%orig(arg1);
++	qwelll_atriadiag_record(self, "imageUpdate.afterOrig", arg1);
+ 	[self _atriaUpdateIconContentScale];
++	qwelll_atriadiag_record(self, "imageUpdate.afterAtria", arg1);
+ }
+ 
+ - (void)setIconContentScale:(CGFloat)scale {
++	qwelll_atriadiag_record(self, "setScale.before", scale);
+ 	%orig(scale);
++	qwelll_atriadiag_record(self, "setScale.afterOrig", scale);
+ 	[self _atriaUpdateIconContentScale];
++	qwelll_atriadiag_record(self, "setScale.afterAtria", scale);
+ }
+ 
+ %new
+@@ -223,7 +231,9 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ }
+ 
+ - (void)didMoveToSuperview {
++	qwelll_atriadiag_record(self, "move.before", NAN);
+ 	%orig;
++	qwelll_atriadiag_record(self, "move.afterOrig", NAN);
+ 	if(self.superview && [self.superview isKindOfClass:ARIIconListViewClass()]) {
+ 		self._atriaLastIconListView = (SBIconListView *)self.superview;
+ 		// Update allowsLabelArea
+@@ -236,6 +246,7 @@ static CGFloat ARILabelOffsetForLabel(UIView *label) {
+ 	}
+ 	[self _atriaSetupDropShadow:[[[ARIIconControllerClass() sharedInstance] iconManager] isEditing]];
+ 	[self _atriaUpdateIconContentScale];
++	qwelll_atriadiag_record(self, "move.afterAtria", NAN);
+ }
+ 
+ - (void)setEditing:(BOOL)editing animated:(BOOL)animated {
+@@ -481,6 +492,7 @@ static NSString *ARILibraryPodName(void) {
+ %end
+ 
+ %ctor {
++	qwelll_atriadiag_start();
+ 	if([[ARITweakManager sharedInstance] isEnabled]) {
+ 		ARILog(@"Loading hooks from %s", __FILE__);
+ 		%init();
+diff --git a/src/Hooks/qwelllAtriaReturnDiagnostic.h b/src/Hooks/qwelllAtriaReturnDiagnostic.h
+new file mode 100644
+index 0000000..5c1e2e7
+--- /dev/null
++++ b/src/Hooks/qwelllAtriaReturnDiagnostic.h
+@@ -0,0 +1,4 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++#import <UIKit/UIKit.h>
++void qwelll_atriadiag_record(UIView *view, const char *event, double argument);
++void qwelll_atriadiag_start(void);
+diff --git a/src/Manager/qwelllAtriaReturnDiagnostic.m b/src/Manager/qwelllAtriaReturnDiagnostic.m
+new file mode 100644
+index 0000000..ed2aae5
+--- /dev/null
++++ b/src/Manager/qwelllAtriaReturnDiagnostic.m
+@@ -0,0 +1,161 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Read-only observations: no animation, scale, layout or visibility writes.
++#import "../Hooks/qwelllAtriaReturnDiagnostic.h"
++#import <QuartzCore/QuartzCore.h>
++#import <objc/runtime.h>
++#import <objc/message.h>
++#import <substrate.h>
++#import <math.h>
++
++static NSMutableArray *qwelll_atriadiag_ring;
++static dispatch_queue_t qwelll_atriadiag_io;
++static BOOL qwelll_atriadiag_pending, qwelll_atriadiag_reading;
++static NSUInteger qwelll_atriadiag_sequence, qwelll_atriadiag_nextID, qwelll_atriadiag_dropped;
++static char qwelll_atriadiag_idKey;
++static NSString *qwelll_atriadiag_system;
++
++static BOOL qwelll_atriadiag_signature(Class cls, SEL sel, const char *ret, const char *arg) {
++    Method m = class_getInstanceMethod(cls, sel);
++    if (!m || method_getNumberOfArguments(m) != (arg ? 3u : 2u)) return NO;
++    char *r = method_copyReturnType(m);
++    BOOL ok = r && strcmp(r, ret) == 0;
++    free(r);
++    if (arg) { char *a = method_copyArgumentType(m, 2); ok = ok && a && strcmp(a, arg) == 0; free(a); }
++    return ok;
++}
++static id qwelll_atriadiag_object(id obj, const char *name) {
++    SEL s = sel_registerName(name);
++    if (!obj || !qwelll_atriadiag_signature(object_getClass(obj), s, "@", NULL)) return nil;
++    return ((id (*)(id, SEL))objc_msgSend)(obj, s);
++}
++static id qwelll_atriadiag_scale(id obj, const char *name) {
++    SEL s = sel_registerName(name);
++    if (!qwelll_atriadiag_signature(object_getClass(obj), s, @encode(CGFloat), NULL)) return [NSNull null];
++    double x = ((CGFloat (*)(id, SEL))objc_msgSend)(obj, s);
++    return isfinite(x) ? @(x) : (id)[NSNull null];
++}
++static NSArray *qwelll_atriadiag_matrix(CATransform3D t) {
++    const CGFloat a[] = {t.m11,t.m12,t.m13,t.m14,t.m21,t.m22,t.m23,t.m24,t.m31,t.m32,t.m33,t.m34,t.m41,t.m42,t.m43,t.m44};
++    NSMutableArray *r = [NSMutableArray arrayWithCapacity:16];
++    for (int i=0;i<16;i++) [r addObject:isfinite(a[i]) ? (id)@(a[i]) : [NSNull null]];
++    return r;
++}
++static NSDictionary *qwelll_atriadiag_layer(CALayer *layer, BOOL sublayer) {
++    if (!layer) return @{};
++    CALayer *p = (CALayer *)layer.presentationLayer;
++    return @{ @"model": qwelll_atriadiag_matrix(sublayer ? layer.sublayerTransform : layer.transform),
++              @"presentation": p ? (id)qwelll_atriadiag_matrix(sublayer ? p.sublayerTransform : p.transform) : [NSNull null] };
++}
++static void qwelll_atriadiag_write(NSArray *batch, NSUInteger dropped) {
++    @autoreleasepool {
++        NSMutableData *data = [NSMutableData data];
++        if (dropped) {
++            NSData *d = [NSJSONSerialization dataWithJSONObject:@{@"event":@"ring_overwrite",@"count":@(dropped)} options:0 error:NULL];
++            [data appendData:d]; [data appendBytes:"\n" length:1];
++        }
++        for (NSDictionary *row in batch) {
++            NSData *d = [NSJSONSerialization dataWithJSONObject:row options:0 error:NULL];
++            if (d) { [data appendData:d]; [data appendBytes:"\n" length:1]; }
++        }
++        NSArray *paths = @[[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/AtriaReturnDiagnostic.log"], @"/tmp/AtriaReturnDiagnostic.log"];
++        for (NSString *path in paths) {
++            NSFileManager *fm = [NSFileManager defaultManager];
++            [fm createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:NULL];
++            unsigned long long size = [[fm attributesOfItemAtPath:path error:NULL][NSFileSize] unsignedLongLongValue];
++            if (size > 2*1024*1024) {
++                [fm removeItemAtPath:[path stringByAppendingString:@".1"] error:NULL];
++                [fm moveItemAtPath:path toPath:[path stringByAppendingString:@".1"] error:NULL];
++            }
++            if (![fm fileExistsAtPath:path]) [fm createFileAtPath:path contents:nil attributes:nil];
++            NSFileHandle *f = [NSFileHandle fileHandleForWritingAtPath:path];
++            if (!f) continue;
++            @try { [f seekToEndOfFile]; [f writeData:data]; [f closeFile]; return; }
++            @catch (__unused NSException *e) { @try { [f closeFile]; } @catch (__unused NSException *ignored) {} }
++        }
++    }
++}
++static void qwelll_atriadiag_enqueue(NSDictionary *row) {
++    if (!qwelll_atriadiag_ring) qwelll_atriadiag_ring = [NSMutableArray arrayWithCapacity:480];
++    if (qwelll_atriadiag_ring.count == 480) { [qwelll_atriadiag_ring removeObjectAtIndex:0]; qwelll_atriadiag_dropped++; }
++    [qwelll_atriadiag_ring addObject:row];
++    if (qwelll_atriadiag_pending) return;
++    qwelll_atriadiag_pending = YES;
++    // Event-driven coalescing only, never refresh any scale or view on a timer.
++    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2*NSEC_PER_SEC), dispatch_get_main_queue(), ^{
++        NSArray *batch = [qwelll_atriadiag_ring copy];
++        NSUInteger dropped = qwelll_atriadiag_dropped;
++        [qwelll_atriadiag_ring removeAllObjects]; qwelll_atriadiag_dropped = 0;
++        // Keep pending until I/O finishes: slow storage cannot build an unlimited queue.
++        dispatch_async(qwelll_atriadiag_io, ^{
++            qwelll_atriadiag_write(batch, dropped);
++            dispatch_async(dispatch_get_main_queue(), ^{
++                qwelll_atriadiag_pending = NO;
++                if (qwelll_atriadiag_ring.count) qwelll_atriadiag_enqueue(@{@"event":@"io_merge",@"t":@([NSDate timeIntervalSinceReferenceDate])});
++            });
++        });
++    });
++}
++void qwelll_atriadiag_record(UIView *view, const char *event, double argument) {
++    if (![NSThread isMainThread] || qwelll_atriadiag_reading || !qwelll_atriadiag_io) return;
++    qwelll_atriadiag_reading = YES;
++    @try {
++        id icon = qwelll_atriadiag_object(view, "icon");
++        Class app = objc_getClass("SBApplicationIcon");
++        if (!app || ![icon isKindOfClass:app]) return;
++        id loc = qwelll_atriadiag_object(view, "location");
++        if (![loc isKindOfClass:[NSString class]]) return;
++        // Never log arbitrary location strings; emit only these public enum constants.
++        static NSSet *locations;
++        static dispatch_once_t locationsOnce;
++        dispatch_once(&locationsOnce, ^{ locations = [NSSet setWithObjects:@"SBIconLocationRoot",@"SBIconLocationRootWithWidgets",@"SBIconLocationDock",@"SBIconLocationFloatingDock",@"SBIconLocationFloatingDockSuggestions",nil]; });
++        if (![locations containsObject:loc]) return;
++        NSNumber *identifier = objc_getAssociatedObject(view, &qwelll_atriadiag_idKey);
++        if (!identifier) { identifier = @(++qwelll_atriadiag_nextID); objc_setAssociatedObject(view, &qwelll_atriadiag_idKey, identifier, OBJC_ASSOCIATION_RETAIN_NONATOMIC); }
++        NSMutableDictionary *row = [@{@"seq":@(++qwelll_atriadiag_sequence),@"viewID":identifier,@"t":@([NSDate timeIntervalSinceReferenceDate]),@"uptime":@(CACurrentMediaTime()),@"os":qwelll_atriadiag_system,@"event":@(event),@"arg":isfinite(argument)?(id)@(argument):[NSNull null],@"location":loc,@"superclass":view.superview?NSStringFromClass(object_getClass(view.superview)):@"nil",@"iconContentScale":qwelll_atriadiag_scale(view,"iconContentScale"),@"effectiveIconContentScale":qwelll_atriadiag_scale(view,"effectiveIconContentScale"),@"iconLayerSublayer":qwelll_atriadiag_layer(view.layer,YES),@"parentLayerSublayer":qwelll_atriadiag_layer(view.layer.superlayer,YES)} mutableCopy];
++        UIView *container = qwelll_atriadiag_object(view,"contentContainerView");
++        if ([container isKindOfClass:[UIView class]]) row[@"contentContainer"] = qwelll_atriadiag_layer(container.layer,NO);
++        // Read exactly one existing object ivar, never call a lazy image getter or walk subviews.
++        Ivar iv = class_getInstanceVariable(object_getClass(view),"_iconImageView");
++        if (iv && ivar_getTypeEncoding(iv)[0]=='@') {
++            id image = object_getIvar(view,iv);
++            if ([image isKindOfClass:[UIView class]]) row[@"existingIconImage"] = qwelll_atriadiag_layer(((UIView *)image).layer,NO);
++        }
++        qwelll_atriadiag_enqueue(row);
++    } @catch (__unused NSException *e) { /* No description: exception text can contain app data. */ }
++    @finally { qwelll_atriadiag_reading = NO; }
++}
++static void (*qwelll_atriadiag_origApply)(id,SEL,CGFloat);
++static void (*qwelll_atriadiag_origUpdate)(id,SEL);
++static void (*qwelll_atriadiag_origHidden)(id,SEL,BOOL);
++static void qwelll_atriadiag_apply(id self,SEL cmd,CGFloat x) {
++    qwelll_atriadiag_record(self,"apply.before",x); qwelll_atriadiag_origApply(self,cmd,x); qwelll_atriadiag_record(self,"apply.after",x);
++}
++static void qwelll_atriadiag_update(id self,SEL cmd) {
++    qwelll_atriadiag_record(self,"updateScale.before",NAN); qwelll_atriadiag_origUpdate(self,cmd); qwelll_atriadiag_record(self,"updateScale.after",NAN);
++}
++static void qwelll_atriadiag_hidden(id self,SEL cmd,BOOL x) {
++    qwelll_atriadiag_record(self,"hidden.before",x); qwelll_atriadiag_origHidden(self,cmd,x); qwelll_atriadiag_record(self,"hidden.after",x);
++}
++void qwelll_atriadiag_start(void) {
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{
++        qwelll_atriadiag_io = dispatch_queue_create("com.qwelll.atria.return-diagnostic.io", DISPATCH_QUEUE_SERIAL);
++        qwelll_atriadiag_system = [UIDevice currentDevice].systemVersion;
++        dispatch_async(dispatch_get_main_queue(), ^{
++            Class cls = objc_getClass("SBIconView");
++            NSMutableArray *checks = [NSMutableArray array];
++            const char *names[] = {"_applyIconContentScale:","_updateIconContentScale","setHidden:"};
++            const char *args[] = {@encode(CGFloat),NULL,@encode(BOOL)};
++            IMP hooks[] = {(IMP)qwelll_atriadiag_apply,(IMP)qwelll_atriadiag_update,(IMP)qwelll_atriadiag_hidden};
++            IMP *originals[] = {(IMP *)&qwelll_atriadiag_origApply,(IMP *)&qwelll_atriadiag_origUpdate,(IMP *)&qwelll_atriadiag_origHidden};
++            for (int i=0;i<3;i++) {
++                SEL sel = sel_registerName(names[i]);
++                BOOL valid = qwelll_atriadiag_signature(cls,sel,"v",args[i]);
++                Method m = class_getInstanceMethod(cls,sel);
++                [checks addObject:@{@"selector":@(names[i]),@"enabled":@(valid),@"encoding":m ? @(method_getTypeEncoding(m)) : @"absent"}];
++                if (valid) MSHookMessageEx(cls,sel,hooks[i],originals[i]);
++            }
++            qwelll_atriadiag_enqueue(@{@"event":@"LOAD qwellldiag1",@"os":qwelll_atriadiag_system,@"t":@([NSDate timeIntervalSinceReferenceDate]),@"runtimeChecks":checks,@"ringCapacity":@480});
++        });
++    });
++}
