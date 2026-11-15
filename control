@@ -1,0 +1,9 @@
+Package: com.qwelll.atriazoomguard
+Name: Atria Zoom Guard
+Version: 1.0.0
+Architecture: iphoneos-arm64e
+Description: Keep Atria icon scale stable during the iOS 17 app-to-home zoom transition.
+Maintainer: qwelll
+Author: qwelll
+Section: Tweaks
+Depends: firmware (>= 15.0), mobilesubstrate (>= 0.9.5000)
